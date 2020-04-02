@@ -68,6 +68,11 @@ io.on("connection", socket => {
     }
   })
 
+  socket.on('cardSelected', ({imageId, pairId}) => {
+    console.log('card '+ imageId+ ' with pair '+ pairId+' selected');
+    io.sockets.emit('returnCard', {imageId, pairId});
+  })
+
   
   socket.on("disconnect", () => {
     console.log("Client disconnected");
