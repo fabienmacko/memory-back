@@ -37,14 +37,31 @@ const shuffle = array => {
   return array;
 }
 
+const sendPlayer = (sessionObject, io) => {
+  io.sockets.emit('player', sessionObject);
+}
 
 const startGame = io => {
   // Randomly choose the first player
-  console.log(usersSessions);
   
-  io.sockets.emit('player', usersSessions[Math.floor(Math.random() * 2)]);
+  currentPlayer = usersSessions[Math.floor(Math.random() * 2)];
+  
+  sendPlayer(currentPlayer, io);
   io.sockets.emit('images', shuffle([1,2,3,4,5,6,1,2,3,4,5,6]));
 }
+
+const changePlayer = io => {
+  const nextPlayer = usersSessions.filter(session => session.id != currentPlayer.id)[0];
+  
+  currentPlayer = nextPlayer;
+  sendPlayer(currentPlayer, io);
+}
+
+const pairs = [];
+
+let cardCounter = [];
+
+let currentPlayer = {};
 
 io.on("connection", socket => {
 
@@ -66,13 +83,53 @@ io.on("connection", socket => {
   
       startGame(io);
     }
-  })
+  });
 
+  // When user select a card
   socket.on('cardSelected', ({imageId, pairId}) => {
-    console.log('card '+ imageId+ ' with pair '+ pairId+' selected');
-    io.sockets.emit('returnCard', {imageId, pairId});
-  })
+    
+    // If pairs are empty
+    if (pairs.length === 0) {
+      // If the card has not already found
+      if (true) {
 
+        cardCounter.push({imageId, pairId});
+
+
+        // If 2 cards has been returned, check if they are equal
+        if (cardCounter.length == 2) {
+          
+          // If yes, just push a new pair and let the cards like that, but reset the cardCounter.
+          if (cardCounter[0].pairId === cardCounter[1].pairId ) {
+            pairs.push({currentPlayer, pairId});
+            cardCounter = [];
+          } 
+
+          // If no, just reset the number of cards and reset them.
+          else {
+            // Send images to reset
+            io.sockets.emit('card:reset', cardCounter);
+
+
+            // Reset the images stored
+            cardCounter = [];
+          }
+          changePlayer(io);
+          console.log(pairs.size);
+          
+        }
+
+      io.sockets.emit('returnCard', {imageId, pairId});
+      }
+      
+    }
+    
+  });
+
+  // Change turn
+  socket.on('turn:change', () => {
+    changePlayer(io);
+  })
   
   socket.on("disconnect", () => {
     console.log("Client disconnected");
