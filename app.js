@@ -1,11 +1,32 @@
 const express = require("express");
 const http = require("http");
 const socketIo = require("socket.io");
+const util = require('./util');
 
 const port = process.env.PORT || 4001;
 const index = require("./routes/index");
 
 const app = express();
+
+// Allow all
+app.use(function (req, res, next) {
+
+  // Website you wish to allow to connect
+  res.setHeader('Access-Control-Allow-Origin', 'https://www.fabienmackowiak.com');
+
+  // Request methods you wish to allow
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH, DELETE');
+
+  // Request headers you wish to allow
+  res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With,content-type');
+
+  // Set to true if you need the website to include cookies in the requests sent
+  // to the API (e.g. in case you use sessions)
+  res.setHeader('Access-Control-Allow-Credentials', true);
+
+  // Pass to next layer of middleware
+  next();
+});
 
 app.use(index);
 
@@ -17,27 +38,8 @@ const io = socketIo(server);
 
 let usersSessions = [];
 
-
-const shuffle = array => {
-  var currentIndex = array.length, temporaryValue, randomIndex;
-
-  // While there remain elements to shuffle...
-  while (0 !== currentIndex) {
-
-    // Pick a remaining element...
-    randomIndex = Math.floor(Math.random() * currentIndex);
-    currentIndex -= 1;
-
-    // And swap it with the current element.
-    temporaryValue = array[currentIndex];
-    array[currentIndex] = array[randomIndex];
-    array[randomIndex] = temporaryValue;
-  }
-
-  return array;
-}
-
 const sendPlayer = (sessionObject, io) => {
+  
   io.sockets.emit('player', sessionObject);
 }
 
@@ -45,23 +47,35 @@ const startGame = io => {
   // Randomly choose the first player
   
   currentPlayer = usersSessions[Math.floor(Math.random() * 2)];
-  
+  console.log('Send player executed from startGame');
   sendPlayer(currentPlayer, io);
-  io.sockets.emit('images', shuffle([1,2,3,4,5,6,1,2,3,4,5,6]));
+  io.sockets.emit('images', util.shuffle([1,2,3,4,5,6,7,1,2,3,4,5,6,7]));
 }
 
 const changePlayer = io => {
   const nextPlayer = usersSessions.filter(session => session.id != currentPlayer.id)[0];
   
   currentPlayer = nextPlayer;
+  console.log('Send player executed from changePlayer');
   sendPlayer(currentPlayer, io);
 }
 
-const pairs = [];
+let pairs = [];
 
 let cardCounter = [];
 
 let currentPlayer = {};
+
+
+const resetServerData = () => {
+  pairs = [];
+
+  cardCounter = [];
+
+  currentPlayer = {};
+
+  usersSessions = [];
+}
 
 io.on("connection", socket => {
 
@@ -88,10 +102,8 @@ io.on("connection", socket => {
   // When user select a card
   socket.on('cardSelected', ({imageId, pairId}) => {
     
-    // If pairs are empty
-    if (pairs.length === 0) {
-      // If the card has not already found
-      if (true) {
+    // If the selected card hasn't already be found
+    if (!util.containsObject(pairId, pairs)) {
 
         cardCounter.push({imageId, pairId});
 
@@ -114,14 +126,22 @@ io.on("connection", socket => {
             // Reset the images stored
             cardCounter = [];
           }
-          changePlayer(io);
-          console.log(pairs.size);
+          
+          if (pairs.length != 7) {
+            changePlayer(io);
+          }
           
         }
 
       io.sockets.emit('returnCard', {imageId, pairId});
-      }
+    }
+
+    if (pairs.length == 7) {
       
+      var winner = util.getWinner(pairs);
+      
+      io.sockets.emit('game:winner', winner.currentPlayer.pseudo);
+      resetServerData();
     }
     
   });
