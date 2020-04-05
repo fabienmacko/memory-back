@@ -153,6 +153,7 @@ io.on("connection", socket => {
   
   socket.on("disconnect", () => {
     console.log("Client disconnected");
+    resetServerData();
     // Remove user from active sessions
     usersSessions.splice(usersSessions.indexOf(usersSessions.find(session => session.id === socket.id)), 1);
   });
