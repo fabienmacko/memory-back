@@ -3,6 +3,8 @@ const http = require("http");
 const socketIo = require("socket.io");
 const util = require('./util');
 
+// reset
+
 const port = process.env.PORT || 4001;
 const index = require("./routes/index");
 
@@ -127,9 +129,7 @@ io.on("connection", socket => {
             cardCounter = [];
           }
           
-          if (pairs.length != 7) {
-            changePlayer(io);
-          }
+          changePlayer(io);
           
         }
 
