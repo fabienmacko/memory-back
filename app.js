@@ -7,7 +7,6 @@ const util = require('./util');
 
 const port = process.env.PORT || 4001;
 const index = require("./routes/index");
-
 const app = express();
 
 // Allow all
@@ -38,124 +37,193 @@ const server = http.createServer(app);
 server.listen(port, () => console.log(`Listening on port ${port}`));
 const io = socketIo(server);
 
-let usersSessions = [];
+let waitingRoom = [];
+let rooms = [];
 
-const sendPlayer = (sessionObject, io) => {
-  
-  io.sockets.emit('player', sessionObject);
-}
+// Creqte random Id
+const ID = function () {
+  // Math.random should be unique because of its seeding algorithm.
+  // Convert it to base 36 (numbers + letters), and grab the first 9 characters
+  // after the decimal.
+  return '_' + Math.random().toString(36).substr(2, 9);
+};
 
-const startGame = io => {
-  // Randomly choose the first player
-  
-  currentPlayer = usersSessions[Math.floor(Math.random() * 2)];
-  console.log('Send player executed from startGame');
-  sendPlayer(currentPlayer, io);
-  io.sockets.emit('images', util.shuffle([1,2,3,4,5,6,7,1,2,3,4,5,6,7]));
-}
-
-const changePlayer = io => {
-  const nextPlayer = usersSessions.filter(session => session.id != currentPlayer.id)[0];
-  
-  currentPlayer = nextPlayer;
-  console.log('Send player executed from changePlayer');
-  sendPlayer(currentPlayer, io);
-}
-
-let pairs = [];
-
-let cardCounter = [];
-
-let currentPlayer = {};
-
-
-const resetServerData = () => {
-  pairs = [];
-
-  cardCounter = [];
-
-  currentPlayer = {};
-
-  usersSessions = [];
-}
-
-io.on("connection", socket => {
-
-  // Send pseudo of the user to the front
-  const waitPseudo = () => new Promise(resolve => {
-    socket.on('pseudo', pseudo => {
-      usersSessions.push({
-        pseudo,
-        id: socket.id
-      });
-      resolve();
-    });
+const startGame = socket => {
+  // Add the two players in a room
+  let roomID = ID();
+  rooms.push({
+    roomID,
+    currentPlayer: {},
+    cardCounter: 0,
+    pairs: [],
+    cardCounter: [],
+    currentPlayer: {},
+    players: [...waitingRoom]
   });
 
-  // Start a game
-  waitPseudo().then(() => {
-    if (usersSessions.length === 2) {
-      io.sockets.emit('startGame', 'The game is starting !');
+  // Reset the waiting room
+  waitingRoom = [];
   
-      startGame(io);
+  
+  let userRoom = util.getUserRoom(rooms, socket);
+
+  // Make them leave the queue room
+  var manageRoomsChangement = new Promise(resolve => {
+    io.to('queue').clients(function(error, clients) {
+      if (clients.length > 0) {
+          clients.forEach(function (socket_id) {
+              // Leave the queue room
+              io.sockets.sockets[socket_id].leave('queue');
+  
+              // Add the two queue sockets into the appropriate room
+              
+              io.sockets.sockets[socket_id].join('room'+roomID);
+          });
+      }
+    });
+    resolve();
+  });
+
+  // When the users leaved the queue room and joined the appropriate room
+  manageRoomsChangement.then(() => {
+    // Randomly choose the first player
+    userRoom.currentPlayer = userRoom.players[Math.floor(Math.random() * 2)];
+    sendPlayer(userRoom.currentPlayer, socket);
+
+    io.to('room'+userRoom.roomID).emit('images', util.shuffle([1,2,3,4,5,6,7,1,2,3,4,5,6,7]));
+  })
+
+
+}
+
+const sendPlayer = (currentPlayer, socket) => {
+  let userRoom = util.getUserRoom(rooms, socket);
+  io.to('room'+userRoom.roomID).emit('player', currentPlayer);
+}
+
+const changePlayer = (io, socket) => {
+  let userRoom = util.getUserRoom(rooms, socket);
+  const nextPlayer = userRoom.players.find(player => player.id != userRoom.currentPlayer.id);
+  
+  userRoom.currentPlayer = nextPlayer;
+  sendPlayer(userRoom.currentPlayer, socket);
+}
+
+
+const closeRoom = socket => {
+  let userRoom = util.getUserRoom(rooms, socket);
+
+  var indexOfRoom = rooms.indexOf(userRoom);
+  
+
+  // Inform the room that his opponnent leaved
+  io.to('room'+userRoom.roomID).emit('game:cancelled');
+  
+
+  if (userRoom) {
+
+    // Disconnect all clients that was in this room
+    io.to('room'+userRoom.roomID).clients(function(error, clients){
+      if (error) throw error;
+      for(let i=0; i < clients.length; i++){
+          io.sockets.connected[clients[i]].disconnect(true)
+      }
+    });
+
+    // Delete the room
+    console.log(rooms.splice(indexOfRoom, 1), 'deleted element');
+
+    console.log(rooms, 'rooms after closure');
+  }
+}
+
+//
+
+io.on("connection", socket => {
+  console.log('New client connect');
+  
+  // Send pseudo of the user to the front
+  socket.on('pseudo', pseudo => {
+    // Add the new player to queue
+    waitingRoom.push({
+      pseudo,
+      id: socket.id,
+      points: 0
+    });
+
+    socket.join('queue');
+
+    // If there is two players  that are in queue, create a room and start the game
+    if (waitingRoom.length === 2) {
+      io.to('queue').emit('startGame', waitingRoom);
+      
+      startGame(socket);
     }
   });
 
   // When user select a card
   socket.on('cardSelected', ({imageId, pairId}) => {
+    let userRoom = util.getUserRoom(rooms, socket);
     
     // If the selected card hasn't already be found
-    if (!util.containsObject(pairId, pairs)) {
+    if (!util.containsObject(pairId, userRoom.pairs)) {
 
-        cardCounter.push({imageId, pairId});
+        userRoom.cardCounter.push({imageId, pairId});
 
 
         // If 2 cards has been returned, check if they are equal
-        if (cardCounter.length == 2) {
+        if (userRoom.cardCounter.length == 2) {
           
-          // If yes, just push a new pair and let the cards like that, but reset the cardCounter.
-          if (cardCounter[0].pairId === cardCounter[1].pairId ) {
-            pairs.push({currentPlayer, pairId});
-            cardCounter = [];
+          // If yes, just push a new pair and let the cards like that, but reset the userRoom.cardCounter.
+          if (userRoom.cardCounter[0].pairId === userRoom.cardCounter[1].pairId ) {
+            userRoom.pairs.push({player: userRoom.currentPlayer, pairId});
+            userRoom.cardCounter = [];
+
+            // Add new point to the user, and send the user object to the front in order to render the new score
+            for (let i = 0; i < userRoom.players.length; i++) {
+              const player = userRoom.players[i];
+              
+              if (player.pseudo == userRoom.currentPlayer.pseudo) {
+                player.points++;
+              }
+            }
+            io.to('room'+userRoom.roomID).emit('score:add', userRoom.players);
           } 
 
           // If no, just reset the number of cards and reset them.
           else {
             // Send images to reset
-            io.sockets.emit('card:reset', cardCounter);
+            io.to('room'+userRoom.roomID).emit('card:reset', userRoom.cardCounter);
 
 
             // Reset the images stored
-            cardCounter = [];
+            userRoom.cardCounter = [];
           }
           
-          changePlayer(io);
+          changePlayer(io, socket);
           
         }
 
-      io.sockets.emit('returnCard', {imageId, pairId});
+      io.to('room'+userRoom.roomID).emit('returnCard', {imageId, pairId});
     }
 
-    if (pairs.length == 7) {
+    if (userRoom.pairs.length == 7) {
+      var winner = util.getWinner(userRoom.pairs);
       
-      var winner = util.getWinner(pairs);
-      
-      io.sockets.emit('game:winner', winner.currentPlayer.pseudo);
-      resetServerData();
+      io.to('room'+userRoom.roomID).emit('game:winner', winner.pseudo);
     }
     
   });
 
   // Change turn
   socket.on('turn:change', () => {
-    changePlayer(io);
+    changePlayer(io, socket);
   })
   
   socket.on("disconnect", () => {
     console.log("Client disconnected");
-    resetServerData();
-    // Remove user from active sessions
-    usersSessions.splice(usersSessions.indexOf(usersSessions.find(session => session.id === socket.id)), 1);
+
+    closeRoom(socket);
   });
 
 });

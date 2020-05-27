@@ -12,9 +12,25 @@ const containsObject = (pairId, array) => {
 
 const getWinner = arr => {
   return arr.sort((a,b) =>
-  arr.filter(v => v.currentPlayer.pseudo===a.currentPlayer.pseudo).length
-- arr.filter(v => v.currentPlayer.pseudo===b.currentPlayer.pseudo).length
-).pop();
+  arr.filter(v => v.player.pseudo===a.player.pseudo).length
+- arr.filter(v => v.player.pseudo===b.player.pseudo).length
+).pop().player;
+}
+
+const getUserRoom = (rooms, socket) => {
+  let userRoom = false;
+
+  rooms.forEach((room => {
+    room.players.forEach(player => {    
+      if (player.id == socket.id) {
+        userRoom = room;
+      }
+    });
+  }));
+  
+  console.log(userRoom, 'UserRoom returned from the util function');
+  
+  return userRoom;
 }
 
 
@@ -40,3 +56,4 @@ const shuffle = array => {
 exports.shuffle = shuffle;
 exports.getWinner = getWinner;
 exports.containsObject = containsObject;
+exports.getUserRoom = getUserRoom;
