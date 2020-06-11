@@ -131,17 +131,16 @@ const closeRoom = socket => {
     });
 
     // Delete the room
-    console.log(rooms.splice(indexOfRoom, 1), 'deleted element');
 
-    console.log(rooms, 'rooms after closure');
+
+    rooms.splice(indexOfRoom, 1);
+
   }
 }
 
 //
 
 io.on("connection", socket => {
-  console.log('New client connect');
-
   // Send pseudo of the user to the front
   socket.on('pseudo', pseudo => {
     // Add the new player to queue
@@ -233,7 +232,6 @@ io.on("connection", socket => {
   })
 
   socket.on("disconnect", () => {
-    console.log("Client disconnected");
     let isUserWaiting = false;
 
     // Check if the user is on waiting room
@@ -242,10 +240,6 @@ io.on("connection", socket => {
             isUserWaiting = true;
           }
       }
-  
-  
-
-    console.log(socket.id);
     
 
     // If the user was on queue, leave the queue
@@ -258,12 +252,7 @@ io.on("connection", socket => {
         }
       }));
 
-      console.log("Waiting room BEFORE", waitingRoom);
-      console.log("User", userObject);
-      console.log("IndexOf User", waitingRoom.indexOf(userObject));
-
       waitingRoom.splice(waitingRoom.indexOf(userObject), 1);
-      console.log("Waiting room AFTER", waitingRoom);
 
     }
     // If user was in a game, close the room 
