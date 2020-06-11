@@ -240,8 +240,7 @@ io.on("connection", socket => {
             isUserWaiting = true;
           }
       }
-    
-
+  
     // If the user was on queue, leave the queue
     if (isUserWaiting) {
       // Get the user object in waiting room
