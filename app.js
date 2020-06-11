@@ -234,10 +234,22 @@ io.on("connection", socket => {
 
   socket.on("disconnect", () => {
     console.log("Client disconnected");
+    let isUserWaiting = false;
 
+    // Check if the user is on waiting room
+      for (let i = 0; i < waitingRoom.length; i++) {
+          if (waitingRoom[i].id === socket.id) {
+            isUserWaiting = true;
+          }
+      }
+  
+  
+
+    console.log(socket.id);
+    
 
     // If the user was on queue, leave the queue
-    if (socket.rooms.indexOf('queue') >= 0) {
+    if (isUserWaiting) {
       // Get the user object in waiting room
       let userObject;
       waitingRoom.forEach((user => {
@@ -246,7 +258,13 @@ io.on("connection", socket => {
         }
       }));
 
-      waitingRoom.slice(waitingRoom.indexOf(userObject), 1);
+      console.log("Waiting room BEFORE", waitingRoom);
+      console.log("User", userObject);
+      console.log("IndexOf User", waitingRoom.indexOf(userObject));
+
+      waitingRoom.splice(waitingRoom.indexOf(userObject), 1);
+      console.log("Waiting room AFTER", waitingRoom);
+
     }
     // If user was in a game, close the room 
     else {
