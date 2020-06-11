@@ -63,22 +63,22 @@ const startGame = socket => {
 
   // Reset the waiting room
   waitingRoom = [];
-  
-  
+
+
   let userRoom = util.getUserRoom(rooms, socket);
 
   // Make them leave the queue room
   var manageRoomsChangement = new Promise(resolve => {
-    io.to('queue').clients(function(error, clients) {
+    io.to('queue').clients(function (error, clients) {
       if (clients.length > 0) {
-          clients.forEach(function (socket_id) {
-              // Leave the queue room
-              io.sockets.sockets[socket_id].leave('queue');
-  
-              // Add the two queue sockets into the appropriate room
-              
-              io.sockets.sockets[socket_id].join('room'+roomID);
-          });
+        clients.forEach(function (socket_id) {
+          // Leave the queue room
+          io.sockets.sockets[socket_id].leave('queue');
+
+          // Add the two queue sockets into the appropriate room
+
+          io.sockets.sockets[socket_id].join('room' + roomID);
+        });
       }
     });
     resolve();
@@ -90,7 +90,7 @@ const startGame = socket => {
     userRoom.currentPlayer = userRoom.players[Math.floor(Math.random() * 2)];
     sendPlayer(userRoom.currentPlayer, socket);
 
-    io.to('room'+userRoom.roomID).emit('images', util.shuffle([1,2,3,4,5,6,7,1,2,3,4,5,6,7]));
+    io.to('room' + userRoom.roomID).emit('images', util.shuffle([1, 2, 3, 4, 5, 6, 7, 1, 2, 3, 4, 5, 6, 7]));
   })
 
 
@@ -98,13 +98,13 @@ const startGame = socket => {
 
 const sendPlayer = (currentPlayer, socket) => {
   let userRoom = util.getUserRoom(rooms, socket);
-  io.to('room'+userRoom.roomID).emit('player', currentPlayer);
+  io.to('room' + userRoom.roomID).emit('player', currentPlayer);
 }
 
 const changePlayer = (io, socket) => {
   let userRoom = util.getUserRoom(rooms, socket);
   const nextPlayer = userRoom.players.find(player => player.id != userRoom.currentPlayer.id);
-  
+
   userRoom.currentPlayer = nextPlayer;
   sendPlayer(userRoom.currentPlayer, socket);
 }
@@ -114,19 +114,19 @@ const closeRoom = socket => {
   let userRoom = util.getUserRoom(rooms, socket);
 
   var indexOfRoom = rooms.indexOf(userRoom);
-  
+
 
   // Inform the room that his opponnent leaved
-  io.to('room'+userRoom.roomID).emit('game:cancelled');
-  
+  io.to('room' + userRoom.roomID).emit('game:cancelled');
+
 
   if (userRoom) {
 
     // Disconnect all clients that was in this room
-    io.to('room'+userRoom.roomID).clients(function(error, clients){
+    io.to('room' + userRoom.roomID).clients(function (error, clients) {
       if (error) throw error;
-      for(let i=0; i < clients.length; i++){
-          io.sockets.connected[clients[i]].disconnect(true)
+      for (let i = 0; i < clients.length; i++) {
+        io.sockets.connected[clients[i]].disconnect(true)
       }
     });
 
@@ -141,7 +141,7 @@ const closeRoom = socket => {
 
 io.on("connection", socket => {
   console.log('New client connect');
-  
+
   // Send pseudo of the user to the front
   socket.on('pseudo', pseudo => {
     // Add the new player to queue
@@ -156,74 +156,102 @@ io.on("connection", socket => {
     // If there is two players  that are in queue, create a room and start the game
     if (waitingRoom.length === 2) {
       io.to('queue').emit('startGame', waitingRoom);
-      
+
       startGame(socket);
     }
   });
 
   // When user select a card
-  socket.on('cardSelected', ({imageId, pairId}) => {
+  socket.on('cardSelected', ({
+    imageId,
+    pairId
+  }) => {
     let userRoom = util.getUserRoom(rooms, socket);
-    
+
     // If the selected card hasn't already be found
     if (!util.containsObject(pairId, userRoom.pairs)) {
 
-        userRoom.cardCounter.push({imageId, pairId});
+      userRoom.cardCounter.push({
+        imageId,
+        pairId
+      });
 
 
-        // If 2 cards has been returned, check if they are equal
-        if (userRoom.cardCounter.length == 2) {
-          
-          // If yes, just push a new pair and let the cards like that, but reset the userRoom.cardCounter.
-          if (userRoom.cardCounter[0].pairId === userRoom.cardCounter[1].pairId ) {
-            userRoom.pairs.push({player: userRoom.currentPlayer, pairId});
-            userRoom.cardCounter = [];
+      // If 2 cards has been returned, check if they are equal
+      if (userRoom.cardCounter.length == 2) {
 
-            // Add new point to the user, and send the user object to the front in order to render the new score
-            for (let i = 0; i < userRoom.players.length; i++) {
-              const player = userRoom.players[i];
-              
-              if (player.pseudo == userRoom.currentPlayer.pseudo) {
-                player.points++;
-              }
+        // If yes, just push a new pair and let the cards like that, but reset the userRoom.cardCounter.
+        if (userRoom.cardCounter[0].pairId === userRoom.cardCounter[1].pairId) {
+          userRoom.pairs.push({
+            player: userRoom.currentPlayer,
+            pairId
+          });
+          userRoom.cardCounter = [];
+
+          // Add new point to the user, and send the user object to the front in order to render the new score
+          for (let i = 0; i < userRoom.players.length; i++) {
+            const player = userRoom.players[i];
+
+            if (player.pseudo == userRoom.currentPlayer.pseudo) {
+              player.points++;
             }
-            io.to('room'+userRoom.roomID).emit('score:add', userRoom.players);
-          } 
-
-          // If no, just reset the number of cards and reset them.
-          else {
-            // Send images to reset
-            io.to('room'+userRoom.roomID).emit('card:reset', userRoom.cardCounter);
-
-
-            // Reset the images stored
-            userRoom.cardCounter = [];
           }
-          
-          changePlayer(io, socket);
-          
+          io.to('room' + userRoom.roomID).emit('score:add', userRoom.players);
         }
 
-      io.to('room'+userRoom.roomID).emit('returnCard', {imageId, pairId});
+        // If no, just reset the number of cards and reset them.
+        else {
+          // Send images to reset
+          io.to('room' + userRoom.roomID).emit('card:reset', userRoom.cardCounter);
+
+
+          // Reset the images stored
+          userRoom.cardCounter = [];
+        }
+
+        changePlayer(io, socket);
+
+      }
+
+      io.to('room' + userRoom.roomID).emit('returnCard', {
+        imageId,
+        pairId
+      });
     }
 
     if (userRoom.pairs.length == 7) {
       var winner = util.getWinner(userRoom.pairs);
-      
-      io.to('room'+userRoom.roomID).emit('game:winner', winner.pseudo);
+
+      io.to('room' + userRoom.roomID).emit('game:winner', winner.pseudo);
     }
-    
+
   });
 
   // Change turn
   socket.on('turn:change', () => {
     changePlayer(io, socket);
   })
-  
+
   socket.on("disconnect", () => {
     console.log("Client disconnected");
 
-    closeRoom(socket);
+
+    // If the user was on queue, leave the queue
+    if (socket.rooms.indexOf('queue') >= 0) {
+      // Get the user object in waiting room
+      let userObject;
+      waitingRoom.forEach((user => {
+        if (user.id == socket.id) {
+          userObject = user;
+        }
+      }));
+
+      waitingRoom.slice(waitingRoom.indexOf(userObject), 1);
+    }
+    // If user was in a game, close the room 
+    else {
+      closeRoom(socket);
+    }
   });
 
 });
